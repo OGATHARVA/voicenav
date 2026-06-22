@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Voice Navigation Extension Settings</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #fafafa;
+      color: #09090b;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .card {
+      background: white;
+      border: 1px solid #e4e4e7;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05);
+    }
+    h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: #18181b;
+    }
+    p {
+      color: #71717a;
+      margin-bottom: 20px;
+    }
+    .btn {
+      display: inline-block;
+      background: #18181b;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .btn:hover {
+      background: #27272a;
+    }
+    .status {
+      margin-top: 15px;
+      font-weight: 500;
+    }
+    .status.granted {
+      color: #10B981;
+    }
+    .status.denied {
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Microphone Permission</h1>
+    <p>This extension needs microphone permission to process your voice commands. Click the button below to grant access.</p>
+    <button id="request-btn" class="btn">Grant Microphone Permission</button>
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    const requestBtn = document.getElementById('request-btn');
+    const statusDiv = document.getElementById('status');
+
+    async function checkPermission() {
+      try {
+        const permissionStatus = await navigator.permissions.query({ name: 'microphone' });
+        updateStatus(permissionStatus.state);
+        permissionStatus.onchange = () => updateStatus(permissionStatus.state);
+      } catch (err) {
+        console.warn('Permissions API query not supported:', err);
+      }
+    }
+
+    function updateStatus(state) {
+      if (state === 'granted') {
+        statusDiv.textContent = '✓ Microphone permission granted successfully!';
+        statusDiv.className = 'status granted';
+        requestBtn.style.display = 'none';
+      } else if (state === 'denied') {
+        statusDiv.textContent = '✗ Permission denied. Please enable it in browser settings.';
+        statusDiv.className = 'status denied';
+      } else {
+        statusDiv.textContent = '';
+        requestBtn.style.display = 'inline-block';
+      }
+    }
+
+    requestBtn.addEventListener('click', async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop());
+        updateStatus('granted');
+        setTimeout(() => {
+          // If opened as options page, user might just close or keep it
+        }, 1500);
+      } catch (err) {
+        updateStatus('denied');
+      }
+    });
+
+    checkPermission();
+  </script>
+</body>
+</html>

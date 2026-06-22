@@ -135,8 +135,8 @@ export default function Contact() {
                     <fieldset>
                       <legend className="sr-only">Contact details</legend>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                      {/* Name */}
-                      <div>
+                        {/* Name */}
+                        <div>
                           <label htmlFor="contact-name" className="block text-xs font-semibold text-[var(--clr-text-muted)] uppercase tracking-wide mb-1.5">
                             Full Name <span aria-hidden="true" className="text-[var(--clr-error)]">*</span>
                             <span className="sr-only">(required)</span>
@@ -184,56 +184,6 @@ export default function Contact() {
                             <p id="email-error" role="alert" className="text-xs text-[var(--clr-error)] mt-1">{errors.email}</p>
                           )}
                         </div>
-=======
-                      {/* Name */}
-                      <div>
-                        <label htmlFor="contact-name" className="block text-xs font-semibold text-[var(--clr-text-muted)] uppercase tracking-wide mb-1.5">
-                          Full Name <span aria-hidden="true" className="text-[var(--clr-error)]">*</span>
-                          <span className="sr-only">(required)</span>
-                        </label>
-                        <input
-                          type="text"
-                          id="contact-name"
-                          name="name"
-                          value={form.name}
-                          onChange={handleChange}
-                          placeholder="Atharva Bhosle"
-                          autoComplete="name"
-                          required
-                          aria-required="true"
-                          aria-invalid={!!errors.name}
-                          aria-describedby={errors.name ? 'name-error' : undefined}
-                          className={inputClass('name')}
-                        />
-                        {errors.name && (
-                          <p id="name-error" role="alert" className="text-xs text-[var(--clr-error)] mt-1">{errors.name}</p>
-                        )}
-                      </div>
-
-                      {/* Email */}
-                      <div>
-                        <label htmlFor="contact-email" className="block text-xs font-semibold text-[var(--clr-text-muted)] uppercase tracking-wide mb-1.5">
-                          Email Address <span aria-hidden="true" className="text-[var(--clr-error)]">*</span>
-                          <span className="sr-only">(required)</span>
-                        </label>
-                        <input
-                          type="email"
-                          id="contact-email"
-                          name="email"
-                          value={form.email}
-                          onChange={handleChange}
-                          placeholder="atharva@gmail.com"
-                          autoComplete="email"
-                          required
-                          aria-required="true"
-                          aria-invalid={!!errors.email}
-                          aria-describedby={errors.email ? 'email-error' : undefined}
-                          className={inputClass('email')}
-                        />
-                        {errors.email && (
-                          <p id="email-error" role="alert" className="text-xs text-[var(--clr-error)] mt-1">{errors.email}</p>
-                        )}
->>>>>>> 75d0ead (Update site content: remove sections and update team/contact)
                       </div>
                     </fieldset>
 

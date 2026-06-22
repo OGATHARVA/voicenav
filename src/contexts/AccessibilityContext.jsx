@@ -37,10 +37,40 @@ export function AccessibilityProvider({ children }) {
     } catch { return DEFAULTS; }
   });
 
-  /* Persist to localStorage */
+  /* Synchronize settings from chrome.storage.local if running as extension */
   useEffect(() => {
-    try { localStorage.setItem('tycs-a11y', JSON.stringify(settings)); }
-    catch { /* ignore */ }
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get('tycs-a11y', (result) => {
+        if (result && result['tycs-a11y']) {
+          setSettings(result['tycs-a11y']);
+        }
+      });
+    }
+  }, []);
+
+  /* Persist settings to localStorage and chrome.storage.local */
+  useEffect(() => {
+    try {
+      localStorage.setItem('tycs-a11y', JSON.stringify(settings));
+    } catch { /* ignore */ }
+
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ 'tycs-a11y': settings });
+    }
+
+    // Send accessibility settings update to the active browser tab
+    if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'APPLY_A11Y',
+            settings
+          }).catch(err => {
+            // Content script might not be injected in special chrome:// pages or during load
+          });
+        }
+      });
+    }
   }, [settings]);
 
   /* Apply classes/styles to <html> element */

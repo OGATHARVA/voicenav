@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Voice Controlled Website Navigation",
+  "version": "1.0.0",
+  "description": "Navigate the web using multilingual voice commands and configure advanced accessibility features.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Voice Website Navigation"
+  },
+  "side_panel": {
+    "default_path": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "options_page": "options.html",
+  "icons": {
+    "128": "favicon.svg"
+  }
+}

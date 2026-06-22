@@ -606,6 +606,14 @@ export function VoiceProvider({ children }) {
     activeUtterancesRef.current = [];
   }, []);
 
+  const openUrl = useCallback((url) => {
+    if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.create) {
+      chrome.tabs.create({ url });
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }, []);
+
   const confirmPendingAction = useCallback(() => {
     const action = pendingActionRef.current;
     if (!action) return;
@@ -613,7 +621,7 @@ export function VoiceProvider({ children }) {
       clearInterval(pendingTimerRef.current);
     }
     setPendingAction(null);
-    window.open(action.site.url, '_blank', 'noopener,noreferrer');
+    openUrl(action.site.url);
     
     const lang = settings.language || 'en';
     const entry = {
@@ -638,7 +646,7 @@ export function VoiceProvider({ children }) {
         setStatus(wantsListeningRef.current ? STATUS.listening : STATUS.idle);
       }
     }, 1500);
-  }, [showToast, speak, settings.language]);
+  }, [showToast, speak, settings.language, openUrl]);
 
   const cancelPendingAction = useCallback(() => {
     if (pendingTimerRef.current) {
@@ -658,7 +666,7 @@ export function VoiceProvider({ children }) {
     }
     setPendingAction(null);
     const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(action.query)}`;
-    window.open(googleUrl, '_blank', 'noopener,noreferrer');
+    openUrl(googleUrl);
     
     const lang = settings.language || 'en';
     const entry = {
@@ -683,67 +691,86 @@ export function VoiceProvider({ children }) {
         setStatus(wantsListeningRef.current ? STATUS.listening : STATUS.idle);
       }
     }, 1500);
-  }, [showToast, speak, settings.language]);
+  }, [showToast, speak, settings.language, openUrl]);
 
   const readPage = useCallback(() => {
     if (!window.speechSynthesis) {
       showToast('Speech synthesis not supported in this browser.', 'error');
       return;
     }
-    const main = document.getElementById('main-content') || document.querySelector('main');
-    if (!main) { showToast('No page content found to read.', 'error'); return; }
-    const clone = main.cloneNode(true);
-    clone.querySelectorAll('[aria-hidden="true"], script, style, .sr-only, nav').forEach(el => el.remove());
-    const text = clone.textContent?.replace(/\s+/g, ' ').trim();
-    if (!text) { showToast('No readable text found on this page.', 'error'); return; }
-    
-    stopSpeaking();
 
-    const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
-    const CHUNK = 3;
-    const utterances = [];
+    const speakText = (text) => {
+      if (!text) { showToast('No readable text found on this page.', 'error'); return; }
+      stopSpeaking();
 
-    for (let i = 0; i < sentences.length; i += CHUNK) {
-      const chunk = sentences.slice(i, i + CHUNK).join(' ').trim();
-      if (!chunk) continue;
-      const utter = new SpeechSynthesisUtterance(chunk);
-      utter.rate  = 1.0;
-      utter.pitch = 1.0;
-      utter.lang  = langRef.current;
-      utterances.push(utter);
-    }
+      const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+      const CHUNK = 3;
+      const utterances = [];
 
-    if (utterances.length === 0) {
-      showToast('No readable text found on this page.', 'error');
-      return;
-    }
+      for (let i = 0; i < sentences.length; i += CHUNK) {
+        const chunk = sentences.slice(i, i + CHUNK).join(' ').trim();
+        if (!chunk) continue;
+        const utter = new SpeechSynthesisUtterance(chunk);
+        utter.rate  = 1.0;
+        utter.pitch = 1.0;
+        utter.lang  = langRef.current;
+        utterances.push(utter);
+      }
 
-    activeUtterancesRef.current = utterances;
+      if (utterances.length === 0) {
+        showToast('No readable text found on this page.', 'error');
+        return;
+      }
 
-    // Attach start event to the first utterance
-    utterances[0].onstart = () => setIsSpeaking(true);
+      activeUtterancesRef.current = utterances;
 
-    // Attach end event to the last utterance
-    const lastUtter = utterances[utterances.length - 1];
-    lastUtter.onend = () => {
-      setIsSpeaking(false);
-      activeUtterancesRef.current = [];
-    };
+      // Attach start event to the first utterance
+      utterances[0].onstart = () => setIsSpeaking(true);
 
-    // Attach error handler to all utterances
-    utterances.forEach(u => {
-      u.onerror = () => {
+      // Attach end event to the last utterance
+      const lastUtter = utterances[utterances.length - 1];
+      lastUtter.onend = () => {
         setIsSpeaking(false);
         activeUtterancesRef.current = [];
       };
-    });
 
-    // Speak all of them sequentially
-    utterances.forEach(u => {
-      window.speechSynthesis.speak(u);
-    });
+      // Attach error handler to all utterances
+      utterances.forEach(u => {
+        u.onerror = () => {
+          setIsSpeaking(false);
+          activeUtterancesRef.current = [];
+        };
+      });
 
-    showToast('📖 Reading page content aloud…', 'info', 4000);
+      // Speak all of them sequentially
+      utterances.forEach(u => {
+        window.speechSynthesis.speak(u);
+      });
+
+      showToast('📖 Reading page content aloud…', 'info', 4000);
+    };
+
+    if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_PAGE_TEXT' }, (response) => {
+            if (response && response.text) {
+              speakText(response.text);
+            } else {
+              showToast('Could not retrieve text from page.', 'error');
+            }
+          });
+        }
+      });
+    } else {
+      // Local fallback
+      const main = document.getElementById('main-content') || document.querySelector('main');
+      if (!main) { showToast('No page content found to read.', 'error'); return; }
+      const clone = main.cloneNode(true);
+      clone.querySelectorAll('[aria-hidden="true"], script, style, .sr-only, nav').forEach(el => el.remove());
+      const text = clone.textContent?.replace(/\s+/g, ' ').trim();
+      speakText(text);
+    }
   }, [showToast, stopSpeaking]);
 
   const stopListening = useCallback(() => {
@@ -934,7 +961,7 @@ export function VoiceProvider({ children }) {
           } else {
             // Google fallback
             const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(target)}`;
-            window.open(googleUrl, '_blank', 'noopener,noreferrer');
+            openUrl(googleUrl);
             const entry = {
               id:         Date.now(),
               text:       lower,
@@ -963,74 +990,95 @@ export function VoiceProvider({ children }) {
       }
 
       if (dynamicAction) {
-        let success;
-        
-        if (dynamicAction === 'SEARCH') {
-          const searchEl = document.querySelector('input[type="search"], input[name*="search"], input[id*="search"], input[placeholder*="search"]');
-          if (searchEl) {
-            window.dispatchEvent(new CustomEvent('tycs:action', { 
-              detail: { action: 'FOCUS', target: 'search' } 
-            }));
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('tycs:action', { 
-                detail: { action: 'TYPE', value: dynamicValue } 
-              }));
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('tycs:action', { 
-                  detail: { action: 'SUBMIT' } 
-                }));
-              }, 300);
-            }, 300);
-            success = true;
+        const executeDynamic = (callback) => {
+          if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+              if (tabs[0]?.id) {
+                chrome.tabs.sendMessage(tabs[0].id, {
+                  type: 'VOICE_ACTION',
+                  command: { action: dynamicAction, target: dynamicTarget, value: dynamicValue }
+                }, (response) => {
+                  const success = !!response?.success;
+                  callback(success);
+                });
+              } else {
+                callback(false);
+              }
+            });
           } else {
-            window.dispatchEvent(new CustomEvent('tycs:action', { 
-              detail: { action: 'FOCUS', target: 'search' } 
-            }));
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('tycs:action', { 
-                detail: { action: 'TYPE', value: dynamicValue } 
-              }));
-            }, 300);
-            success = true;
+            // Local fallback
+            let success = false;
+            if (dynamicAction === 'SEARCH') {
+              const searchEl = document.querySelector('input[type="search"], input[name*="search"], input[id*="search"], input[placeholder*="search"]');
+              if (searchEl) {
+                window.dispatchEvent(new CustomEvent('tycs:action', { 
+                  detail: { action: 'FOCUS', target: 'search' } 
+                }));
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('tycs:action', { 
+                    detail: { action: 'TYPE', value: dynamicValue } 
+                  }));
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('tycs:action', { 
+                      detail: { action: 'SUBMIT' } 
+                    }));
+                  }, 300);
+                }, 300);
+                success = true;
+              } else {
+                window.dispatchEvent(new CustomEvent('tycs:action', { 
+                  detail: { action: 'FOCUS', target: 'search' } 
+                }));
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('tycs:action', { 
+                    detail: { action: 'TYPE', value: dynamicValue } 
+                  }));
+                }, 300);
+                success = true;
+              }
+            } else {
+              const event = new CustomEvent('tycs:action', { 
+                detail: { action: dynamicAction, target: dynamicTarget, value: dynamicValue } 
+              });
+              window.dispatchEvent(event);
+              success = true;
+            }
+            callback(success);
           }
-        } else {
-          const event = new CustomEvent('tycs:action', { 
-            detail: { action: dynamicAction, target: dynamicTarget, value: dynamicValue } 
-          });
-          window.dispatchEvent(event);
-          success = true;
-        }
-
-        const entry = {
-          id:         Date.now(),
-          text:       lower,
-          label:      dynamicLabel,
-          icon:       dynamicIcon,
-          success:    success,
-          timestamp:  new Date(),
-          confidence: conf || 0.95,
-          nlScore:    0.95,
-          method:     'universal',
-          lang,
         };
 
-        dispatchHistory({ type: 'ADD', entry });
-        setLastCommand(entry);
-        
-        if (success) {
-          showToast(`${dynamicIcon} Executing: ${dynamicLabel}`, 'success');
-          speak(dynamicLabel);
-          setStatus(STATUS.success);
-        } else {
-          showToast(`❌ Failed to execute: ${dynamicLabel}`, 'error');
-          setStatus(STATUS.error);
-        }
+        executeDynamic((success) => {
+          const entry = {
+            id:         Date.now(),
+            text:       lower,
+            label:      dynamicLabel,
+            icon:       dynamicIcon,
+            success:    success,
+            timestamp:  new Date(),
+            confidence: conf || 0.95,
+            nlScore:    0.95,
+            method:     'universal',
+            lang,
+          };
 
-        successTimer.current = setTimeout(() => {
-          if (statusRef.current === STATUS.success || statusRef.current === STATUS.error) {
-            setStatus(wantsListeningRef.current ? STATUS.listening : STATUS.idle);
+          dispatchHistory({ type: 'ADD', entry });
+          setLastCommand(entry);
+          
+          if (success) {
+            showToast(`${dynamicIcon} Executing: ${dynamicLabel}`, 'success');
+            speak(dynamicLabel);
+            setStatus(STATUS.success);
+          } else {
+            showToast(`❌ Failed to execute: ${dynamicLabel}`, 'error');
+            setStatus(STATUS.error);
           }
-        }, 1500);
+
+          successTimer.current = setTimeout(() => {
+            if (statusRef.current === STATUS.success || statusRef.current === STATUS.error) {
+              setStatus(wantsListeningRef.current ? STATUS.listening : STATUS.idle);
+            }
+          }, 1500);
+        });
 
         return;
       }
@@ -1065,12 +1113,37 @@ export function VoiceProvider({ children }) {
           speak(getConfirm(lang, 'goBack'));
         } else if (cmd.action === 'scroll') {
           const keyMap = { down: 'scrollDown', up: 'scrollUp', top: 'scrollTop', bottom: 'scrollBottom' };
-          if      (cmd.target === 'down')   window.scrollBy({ top:  400, behavior: 'smooth' });
-          else if (cmd.target === 'up')     window.scrollBy({ top: -400, behavior: 'smooth' });
-          else if (cmd.target === 'top')    window.scrollTo({ top:    0, behavior: 'smooth' });
-          else if (cmd.target === 'bottom') window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-          showToast(`${cmd.icon} ${cmd.label}${methodTag}`, 'success');
-          speak(getConfirm(lang, keyMap[cmd.target]));
+          const executeScroll = (callback) => {
+            if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.query) {
+              chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                if (tabs[0]?.id) {
+                  chrome.tabs.sendMessage(tabs[0].id, {
+                    type: 'VOICE_ACTION',
+                    command: { action: 'SCROLL', target: cmd.target }
+                  }, (response) => {
+                    callback(!!response?.success);
+                  });
+                } else {
+                  callback(false);
+                }
+              });
+            } else {
+              if      (cmd.target === 'down')   window.scrollBy({ top:  400, behavior: 'smooth' });
+              else if (cmd.target === 'up')     window.scrollBy({ top: -400, behavior: 'smooth' });
+              else if (cmd.target === 'top')    window.scrollTo({ top:    0, behavior: 'smooth' });
+              else if (cmd.target === 'bottom') window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+              callback(true);
+            }
+          };
+
+          executeScroll((success) => {
+            if (success) {
+              showToast(`${cmd.icon} ${cmd.label}${methodTag}`, 'success');
+              speak(getConfirm(lang, keyMap[cmd.target]));
+            } else {
+              showToast(`❌ Scroll failed`, 'error');
+            }
+          });
         } else if (cmd.action === 'help') {
           showToast('Showing available commands', 'info');
           speak(getConfirm(lang, 'help'));
